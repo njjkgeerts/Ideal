@@ -1,9 +1,20 @@
 # encoding: utf-8
 
 require File.expand_path('../helper', __FILE__)
+require 'rexml/document'
 
 module IdealTestCases
-  # This method is called at the end of the file when all fixture data has been loaded.
+  module StripXml
+    def strip_xml(xml)
+      xml.to_s.split(/\n/).map(&:strip).join
+    end
+    
+    def strip_header_and_namespaces(xml)
+      Nokogiri::XML(xml).remove_namespaces!.root.to_s
+    end
+  end
+
+    # This method is called at the end of the file when all fixture data has been loaded.
   def self.setup_ideal_gateway!
     Ideal::Gateway.class_eval do
       self.acquirer = :ing
@@ -34,7 +45,7 @@ module IdealTestCases
 
     def test_verify_live_url_for_ing
       Ideal::Gateway.acquirer = :ing
-      assert_equal 'https://ideal.secure-ing.com/ideal/iDeal', Ideal::Gateway.live_url
+      assert_equal 'https://ideal.secure-ing.com/ideal/iDEALv3', Ideal::Gateway.live_url
     end
 
     def test_verify_live_url_for_rabobank
@@ -104,37 +115,40 @@ module IdealTestCases
       assert_equal timestamp, @gateway.send(:created_at_timestamp)
     end
 
-    def test_digest_value_generation
-      sha256 = OpenSSL::Digest::SHA256.new
-      OpenSSL::Digest::SHA256.stubs(:new).returns(sha256)
+    def test_signing
       xml = Nokogiri::XML::Builder.new do |xml|
         xml.request do |xml|
           xml.content 'digest test'
-          @gateway.send(:sign!, xml)
+          @gateway.send(:add_signature, xml)
         end
       end
-      digest_value = xml.doc.at_xpath('//xmlns:DigestValue', 'xmlns' => 'http://www.w3.org/2000/09/xmldsig#').text
-      xml.doc.at_xpath('//xmlns:Signature', 'xmlns' => 'http://www.w3.org/2000/09/xmldsig#').remove
-      canonical = xml.doc.canonicalize(Nokogiri::XML::XML_C14N_EXCLUSIVE_1_0)
-      digest = sha256.digest canonical
-      expected_digest_value = strip_whitespace(Base64.encode64(strip_whitespace(digest)))
-      assert_equal expected_digest_value, digest_value
+      xml = @gateway.send(:sign!, xml.to_xml)
+      cert = OpenSSL::X509::Certificate.new PRIVATE_CERTIFICATE
+      assert_equal true, Ideal::SignedDocument.new(xml.to_s).validate(cert)
+      # digest_value = xml.doc.at_xpath('//xmlns:DigestValue', 'xmlns' => 'http://www.w3.org/2000/09/xmldsig#').text.chomp
+      # xml.doc.at_xpath('//xmlns:Signature', 'xmlns' => 'http://www.w3.org/2000/09/xmldsig#').remove
+      # canonical = xml.doc.canonicalize(Nokogiri::XML::XML_C14N_EXCLUSIVE_1_0)
+      # digest = sha256.digest(canonical)
+      # expected_digest_value = strip_whitespace(Base64.encode64(strip_whitespace(digest)))
+      # assert_equal expected_digest_value, digest_value
     end
 
 
-    def test_signature_value_generation
-      sha256 = OpenSSL::Digest::SHA256.new
-      OpenSSL::Digest::SHA256.stubs(:new).returns(sha256)
-      signature_value = @gateway.send(:signature_value, 'foo')
-      signature = Ideal::Gateway.private_key.sign(sha256, 'foo')
-      expected_signature_value = strip_whitespace(Base64.encode64(strip_whitespace(signature)))
-      assert_equal expected_signature_value, signature_value
-    end
-
-    def test_key_name_generation
-      expected_token = Digest::SHA1.hexdigest(OpenSSL::X509::Certificate.new(PRIVATE_CERTIFICATE).to_der).upcase
-      assert_equal expected_token, @gateway.send(:fingerprint)
-    end
+    # def test_signature_value_generation
+    #   sha256 = OpenSSL::Digest::SHA256.new
+    #   OpenSSL::Digest::SHA256.stubs(:new).returns(sha256)
+    #   signature_value = @gateway.send(:signature_value, Nokogiri::XML('foo'))
+    #   require 'debugger'
+    #   debugger
+    #   signature = Ideal::Gateway.private_key.sign(sha256, 'foo')
+    #   expected_signature_value = strip_whitespace(Base64.encode64(strip_whitespace(signature)))
+    #   assert_equal expected_signature_value, signature_value
+    # end
+    # 
+    # def test_key_name_generation
+    #   expected_token = Digest::SHA1.hexdigest(OpenSSL::X509::Certificate.new(PRIVATE_CERTIFICATE).to_der)
+    #   assert_equal expected_token, @gateway.send(:fingerprint)
+    # end
 
 
     # def test_token_code_generation
@@ -167,12 +181,14 @@ module IdealTestCases
   end
 
   class XMLBuildingTest < Test::Unit::TestCase
+    include StripXml
+    
     def setup
       @gateway = Ideal::Gateway.new
       @gateway.stubs(:created_at_timestamp).returns('created_at_timestamp')
-      @gateway.stubs(:digest_value).returns('digest_value')
-      @gateway.stubs(:signature_value).returns('signature_value')
-      @gateway.stubs(:fingerprint).returns('fingerprint')
+      # @gateway.stubs(:digest_value).returns('digest_value')
+      # @gateway.stubs(:signature_value).returns('signature_value')
+      # @gateway.stubs(:fingerprint).returns('fingerprint')
     end
 
     def test_transaction_request_xml
@@ -184,24 +200,22 @@ module IdealTestCases
         description: 'description',
         entrance_code: 'entrance_code'
       }
-      xml = @gateway.send(:build_transaction_request, 'amount', options)
-      assert_equal xml, TRANSACTION_REQUEST
+      xml = @gateway.send :sign!, @gateway.send(:build_transaction_request, 'amount', options)
+      assert_equal strip_xml(TRANSACTION_REQUEST), strip_xml(xml)
     end
     
     def test_status_request_xml
       options = {
         transaction_id: 'transaction_id',
       }
-      xml = @gateway.send(:build_status_request, options)
-      assert_equal xml, STATUS_REQUEST
+      xml = @gateway.send :sign!, @gateway.send(:build_status_request, options)
+      assert_equal strip_xml(STATUS_REQUEST), strip_xml(xml)
     end
     
     def test_directory_request_xml
-      xml = @gateway.send(:build_directory_request)
-      assert_equal xml, DIRECTORY_REQUEST
-    end
-    
- 
+      xml = @gateway.send :sign!, @gateway.send(:build_directory_request)
+      assert_equal strip_xml(DIRECTORY_REQUEST), strip_xml(xml)
+    end    
   end
 
   class ErroneousInputTest < Test::Unit::TestCase
@@ -284,13 +298,15 @@ module IdealTestCases
   end
 
   class SuccessfulResponseTest < Test::Unit::TestCase
+    include StripXml
+    
     def setup
       @response = Ideal::Response.new(DIRECTORY_RESPONSE_WITH_MULTIPLE_ISSUERS)
     end
 
     def test_initializes_with_only_response_body
-      assert_equal REXML::Document.new(DIRECTORY_RESPONSE_WITH_MULTIPLE_ISSUERS).root.to_s,
-                    @response.instance_variable_get(:@response).to_s
+      assert_equal strip_xml(strip_header_and_namespaces(DIRECTORY_RESPONSE_WITH_MULTIPLE_ISSUERS)),
+                   strip_xml(@response.instance_variable_get(:@response))
     end
 
     def test_successful
@@ -432,8 +448,7 @@ module IdealTestCases
     def test_capture_of_successful_payment_but_message_does_not_match_signature
       expects_request_and_returns ACQUIRER_SUCCEEDED_BUT_WRONG_SIGNATURE_STATUS_RESPONSE
       capture_response = @gateway.capture('0001023456789112')
-
-      assert !capture_response.success?
+      assert_equal false, capture_response.success?
     end
 
     def test_capture_of_consumer_fields
@@ -465,6 +480,7 @@ module IdealTestCases
       @gateway.expects(:ssl_post).with(@gateway.request_url, 'the request body').returns(str)
     end
   end
+
 
   ###
   #
@@ -697,12 +713,12 @@ ilZjTJIlLOkXk6uE8vQGjZy0BUnjNPkXOQGkTyj4jDxZ2z+z9Vy8BwfothdcYbZK
           <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
         </Transforms>
         <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-        <DigestValue>digest_value</DigestValue>
+        <DigestValue>VCDzI11X2eYx4v0ngdM/jt1RCc7BOtlGfvMKkNT4v6U=</DigestValue>
       </Reference>
     </SignedInfo>
-    <SignatureValue>signature_value</SignatureValue>
+    <SignatureValue>IzYNX9jrXqJTfq5SzIpFgfIPkqmWQJM4b4TxD+O6XbAxNi6/din6oXeq9j0BcUDjdgoqkVIzN9rgwxxt1GXQFZyzUH5X4EsxP+JGe+W6nVvBTrZi7nWN6RsTAjgTSDNCAvgYTDBu5jzvNvXCr+u0nO0C5ZI7ZCRDd3KbI9sZB7E=</SignatureValue>
     <KeyInfo>
-      <KeyName>fingerprint</KeyName>
+      <KeyName>a3078b5ec7adb9db58d62e4aeebc19751c5acbe1</KeyName>
     </KeyInfo>
   </Signature>
 </AcquirerTrxReq>
@@ -724,12 +740,12 @@ ilZjTJIlLOkXk6uE8vQGjZy0BUnjNPkXOQGkTyj4jDxZ2z+z9Vy8BwfothdcYbZK
           <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
         </Transforms>
         <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-        <DigestValue>digest_value</DigestValue>
+        <DigestValue>iFBscXKSORnVsZx5iECt0AlYdIylNXMJpBW55jdJzn8=</DigestValue>
       </Reference>
     </SignedInfo>
-    <SignatureValue>signature_value</SignatureValue>
+    <SignatureValue>A9JPcbbet4JV2uGCZ6JRpYHcMXTGVm/b2nPNfWNHL5Yez+7NZFW9WnYCMmipleaCCx0lkDiRGDF7y9mYYO9ov3VhI0i6lTNxZjSjRlznElgaaaSCFi1f93cntLYzo8RqccK3hCm7sS7GMmBHfZIpq56Nk1uISq1yQ7GDYFF9+1k=</SignatureValue>
     <KeyInfo>
-      <KeyName>fingerprint</KeyName>
+      <KeyName>a3078b5ec7adb9db58d62e4aeebc19751c5acbe1</KeyName>
     </KeyInfo>
   </Signature>
 </DirectoryReq>
@@ -754,12 +770,12 @@ ilZjTJIlLOkXk6uE8vQGjZy0BUnjNPkXOQGkTyj4jDxZ2z+z9Vy8BwfothdcYbZK
           <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
         </Transforms>
         <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-        <DigestValue>digest_value</DigestValue>
+        <DigestValue>SJSUa/N2KsAz5T2+o3AkOFtmLAtNvdpVr+oHV0kHTco=</DigestValue>
       </Reference>
     </SignedInfo>
-    <SignatureValue>signature_value</SignatureValue>
+    <SignatureValue>5LWTuoWvLdnchl/znjGagOWqYPUHXmOdYvcqxpB0POU/ZGaLftleNiKW/5Xmmw7ZUL9vTV27z8olJ9wi+Xw9/4aa9fEoNByn+66IQ+9lwSSzxHICKOtMAw8MmXX6Ryb/LOIqp+DzyHPCG+JMqpo+2jLY96VA9jYwPgVtdA6OWrY=</SignatureValue>
     <KeyInfo>
-      <KeyName>fingerprint</KeyName>
+      <KeyName>a3078b5ec7adb9db58d62e4aeebc19751c5acbe1</KeyName>
     </KeyInfo>
   </Signature>
 </AcquirerStatusReq>

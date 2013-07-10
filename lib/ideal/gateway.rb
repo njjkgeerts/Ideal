@@ -252,8 +252,8 @@ module Ideal
     end    
 
     #signs the xml
-    def sign!(xml)
-      digest_val = digest_value(xml.doc.children[0])
+    def add_signature(xml)
+      # digest_val = digest_value(xml.doc.children[0])
       xml.Signature(xmlns: 'http://www.w3.org/2000/09/xmldsig#') do |xml|
         xml.SignedInfo do |xml|
           xml.CanonicalizationMethod(Algorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#')
@@ -263,17 +263,22 @@ module Ideal
               xml.Transform(Algorithm: 'http://www.w3.org/2000/09/xmldsig#enveloped-signature')
             end
             xml.DigestMethod(Algorithm: 'http://www.w3.org/2001/04/xmlenc#sha256')
-            xml.DigestValue digest_val
+            xml.DigestValue
           end
         end
-        xml.SignatureValue signature_value(xml.doc.xpath("//Signature:SignedInfo", 'Signature' => 'http://www.w3.org/2000/09/xmldsig#')[0])
+        xml.SignatureValue
         xml.KeyInfo do |xml|
           xml.KeyName fingerprint
         end
       end
     end
+    
+    def sign!(xml)
+      SignedDocument.new(xml).sign Ideal::Gateway.private_key
+    end
 
     # Creates a +signatureValue+ from the xml+.
+    # TODO remove
     def signature_value(sig_val)
       canonical = sig_val.canonicalize(Nokogiri::XML::XML_C14N_EXCLUSIVE_1_0)
       signature = Ideal::Gateway.private_key.sign(OpenSSL::Digest::SHA256.new, canonical)
@@ -281,6 +286,7 @@ module Ideal
     end
     
     # Creates a +digestValue+ from the xml+.
+    # TODO remove
     def digest_value(xml)
       canonical = xml.canonicalize(Nokogiri::XML::XML_C14N_EXCLUSIVE_1_0)
       digest = OpenSSL::Digest::SHA256.new.digest canonical
@@ -319,7 +325,7 @@ module Ideal
           xml.Transaction do |xml|
             xml.transactionID options[:transaction_id]
           end
-          sign!(xml)
+          add_signature(xml)
         end
       end.to_xml(:save_with => Nokogiri::XML::Node::SaveOptions::AS_XML)
     end
@@ -333,7 +339,7 @@ module Ideal
             xml.merchantID self.class.merchant_id
             xml.subID @sub_id
           end
-          sign!(xml)
+          add_signature(xml)
         end
       end.to_xml(:save_with => Nokogiri::XML::Node::SaveOptions::AS_XML)
     end
@@ -368,7 +374,7 @@ module Ideal
             xml.description options[:description]
             xml.entranceCode options[:entrance_code]
           end
-          sign!(xml)
+          add_signature(xml)
         end
       end.to_xml(:save_with => Nokogiri::XML::Node::SaveOptions::AS_XML)
     end

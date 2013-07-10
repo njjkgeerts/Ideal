@@ -7,7 +7,7 @@ module Ideal
     end
 
     def validate(certificate = nil, &block)
-      signatures.all? { |signature| signature.valid?(certificate, &block) }
+      signatures.any? && signatures.all? { |signature| signature.valid?(certificate, &block) }
     end
 
     def sign(private_key = nil, &block)

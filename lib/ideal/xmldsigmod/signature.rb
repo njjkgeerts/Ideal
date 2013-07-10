@@ -28,7 +28,7 @@ module Ideal
     end
 
     def sign(private_key = nil, &block)
-      #self.digest_value    = calculate_digest_value
+      self.digest_value    = calculate_digest_value
       self.signature_value = calculate_signature_value(private_key, &block)
     end
 
@@ -42,7 +42,7 @@ module Ideal
 
     def valid?(certificate = nil, &block)
       @errors = []
-      #validate_digest_value
+      validate_digest_value
       validate_signature_value(certificate, &block)
       @errors.empty?
     end

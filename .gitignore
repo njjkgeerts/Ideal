@@ -20,5 +20,5 @@ pkg
 vendor
 .bundle
 .ideal
-
+.ruby-version
 ## PROJECT::SPECIFIC
