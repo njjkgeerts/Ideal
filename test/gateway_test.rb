@@ -8,7 +8,7 @@ module IdealTestCases
     def strip_xml(xml)
       xml.to_s.split(/\n/).map(&:strip).join
     end
-    
+
     def strip_header_and_namespaces(xml)
       Nokogiri::XML(xml).remove_namespaces!.root.to_s
     end
@@ -36,7 +36,7 @@ module IdealTestCases
     :description       => 'A classic Dutch windmill',
     :entrance_code     => '1234'
   }
-  
+
 
   class ClassMethodsTest < Test::Unit::TestCase
     def test_merchant_id
@@ -124,7 +124,7 @@ module IdealTestCases
       end
       xml = @gateway.send(:sign!, xml.to_xml)
       cert = OpenSSL::X509::Certificate.new PRIVATE_CERTIFICATE
-      assert_equal true, Ideal::SignedDocument.new(xml.to_s).validate(cert)
+      assert_equal true, Xmldsig::SignedDocument.new(xml.to_s).validate(cert)
       # digest_value = xml.doc.at_xpath('//xmlns:DigestValue', 'xmlns' => 'http://www.w3.org/2000/09/xmldsig#').text.chomp
       # xml.doc.at_xpath('//xmlns:Signature', 'xmlns' => 'http://www.w3.org/2000/09/xmldsig#').remove
       # canonical = xml.doc.canonicalize(Nokogiri::XML::XML_C14N_EXCLUSIVE_1_0)
@@ -144,7 +144,7 @@ module IdealTestCases
     #   expected_signature_value = strip_whitespace(Base64.encode64(strip_whitespace(signature)))
     #   assert_equal expected_signature_value, signature_value
     # end
-    # 
+    #
     # def test_key_name_generation
     #   expected_token = Digest::SHA1.hexdigest(OpenSSL::X509::Certificate.new(PRIVATE_CERTIFICATE).to_der)
     #   assert_equal expected_token, @gateway.send(:fingerprint)
@@ -155,13 +155,13 @@ module IdealTestCases
     #   Ideal::Gateway.acquirer = :ing
     #   message = "Top\tsecret\tman.\nI could tell you, but then I'd have to kill you…"
     #   stripped_message = message.gsub(/\s/m, '')
-    # 
+    #
     #   sha1 = OpenSSL::Digest::SHA1.new
     #   OpenSSL::Digest::SHA1.stubs(:new).returns(sha1)
-    # 
+    #
     #   signature = Ideal::Gateway.private_key.sign(sha1, stripped_message)
     #   encoded_signature = Base64.encode64(signature).strip.gsub(/\n/, '')
-    # 
+    #
     #   assert_equal encoded_signature, @gateway.send(:token_code, message)
     # end
 
@@ -182,28 +182,25 @@ module IdealTestCases
 
   class XMLBuildingTest < Test::Unit::TestCase
     include StripXml
-    
+
     def setup
       @gateway = Ideal::Gateway.new
       @gateway.stubs(:created_at_timestamp).returns('created_at_timestamp')
-      # @gateway.stubs(:digest_value).returns('digest_value')
-      # @gateway.stubs(:signature_value).returns('signature_value')
-      # @gateway.stubs(:fingerprint).returns('fingerprint')
     end
 
     def test_transaction_request_xml
       options = {
-        issuer_id: 'issuer_id',
-        return_url: 'return_url',
-        order_id: 'purchase_id',
+        issuer_id:         'issuer_id',
+        return_url:        'return_url',
+        order_id:          'purchase_id',
         expiration_period: 'expiration_period',
-        description: 'description',
-        entrance_code: 'entrance_code'
+        description:       'description',
+        entrance_code:     'entrance_code'
       }
       xml = @gateway.send :sign!, @gateway.send(:build_transaction_request, 'amount', options)
       assert_equal strip_xml(TRANSACTION_REQUEST), strip_xml(xml)
     end
-    
+
     def test_status_request_xml
       options = {
         transaction_id: 'transaction_id',
@@ -211,35 +208,35 @@ module IdealTestCases
       xml = @gateway.send :sign!, @gateway.send(:build_status_request, options)
       assert_equal strip_xml(STATUS_REQUEST), strip_xml(xml)
     end
-    
+
     def test_directory_request_xml
       xml = @gateway.send :sign!, @gateway.send(:build_directory_request)
       assert_equal strip_xml(DIRECTORY_REQUEST), strip_xml(xml)
-    end    
+    end
   end
 
   class ErroneousInputTest < Test::Unit::TestCase
-  
+
     def setup
       @gateway = Ideal::Gateway.new
       @gateway.stubs(:created_at_timestamp).returns('created_at_timestamp')
       @gateway.stubs(:digest_value).returns('digest_value')
       @gateway.stubs(:signature_value).returns('signature_value')
       @gateway.stubs(:fingerprint).returns('fingerprint')
-      
+
       @transaction_id = '0001023456789112'
 
     end
-    
+
     def test_valid_with_valid_options
       assert_not_nil @gateway.send(:build_transaction_request, 4321, VALID_PURCHASE_OPTIONS)
     end
-    
+
     def test_checks_that_fields_are_not_too_long
       assert_raise ArgumentError do
         @gateway.send(:build_transaction_request, 1234567890123, VALID_PURCHASE_OPTIONS) # 13 chars
       end
-    
+
       [
         [:order_id, '12345678901234567'], # 17 chars,
         [:description, '123456789012345678901234567890123'], # 33 chars
@@ -247,45 +244,45 @@ module IdealTestCases
       ].each do |key, value|
         options = VALID_PURCHASE_OPTIONS.dup
         options[key] = value
-    
+
         assert_raise ArgumentError do
           @gateway.send(:build_transaction_request, 4321, options)
         end
       end
     end
-  
+
     def test_build_transaction_request_body_raises_ArgumentError_with_missing_required_options
       options = VALID_PURCHASE_OPTIONS.dup
       options.keys.each do |key|
         options.delete(key)
-  
+
         assert_raise(ArgumentError) do
           @gateway.send(:build_transaction_request, 100, options)
         end
       end
     end
-  
+
     def test_checks_that_fields_do_not_contain_diacritical_characters
       assert_raise ArgumentError do
         @gateway.send(:build_transaction_request, 'graphème', VALID_PURCHASE_OPTIONS)
       end
-  
+
       [:order_id, :description, :entrance_code].each do |key, value|
         options = VALID_PURCHASE_OPTIONS.dup
         options[key] = 'graphème'
-  
+
         assert_raise ArgumentError do
           @gateway.send(:build_transaction_request, 4321, options)
         end
       end
     end
-    
+
     def test_builds_a_status_request_body_raises_ArgumentError_with_missing_required_options
       assert_raise(ArgumentError) do
         @gateway.send(:build_status_request, {})
       end
     end
-    
+
   end
 
   class GeneralResponseTest < Test::Unit::TestCase
@@ -299,7 +296,7 @@ module IdealTestCases
 
   class SuccessfulResponseTest < Test::Unit::TestCase
     include StripXml
-    
+
     def setup
       @response = Ideal::Response.new(DIRECTORY_RESPONSE_WITH_MULTIPLE_ISSUERS)
     end
@@ -711,12 +708,13 @@ ilZjTJIlLOkXk6uE8vQGjZy0BUnjNPkXOQGkTyj4jDxZ2z+z9Vy8BwfothdcYbZK
       <Reference URI="">
         <Transforms>
           <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+          <Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
         </Transforms>
         <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-        <DigestValue>VCDzI11X2eYx4v0ngdM/jt1RCc7BOtlGfvMKkNT4v6U=</DigestValue>
+        <DigestValue>wzNtN0lJRr4bnRmcvf1YQcicN+/qEVzQwSOL+J0RQrQ=</DigestValue>
       </Reference>
     </SignedInfo>
-    <SignatureValue>IzYNX9jrXqJTfq5SzIpFgfIPkqmWQJM4b4TxD+O6XbAxNi6/din6oXeq9j0BcUDjdgoqkVIzN9rgwxxt1GXQFZyzUH5X4EsxP+JGe+W6nVvBTrZi7nWN6RsTAjgTSDNCAvgYTDBu5jzvNvXCr+u0nO0C5ZI7ZCRDd3KbI9sZB7E=</SignatureValue>
+    <SignatureValue>okHXp6+M6/QmhQ9eCbxPsxr7+bayb7w5zx2vfCTvgPUMXE1O791G6ak4n2W17yIGpxTjw6iKPhA4zF7h7kuxw5ERfYaqzmWQgD5xEdowGZgaJu2uhMuwS3vd18MR/oDSjDSsha1lxLZzUrTjMPFnzjEUEtEzvnPuL7DVyxE21O0=</SignatureValue>
     <KeyInfo>
       <KeyName>a3078b5ec7adb9db58d62e4aeebc19751c5acbe1</KeyName>
     </KeyInfo>
@@ -738,12 +736,13 @@ ilZjTJIlLOkXk6uE8vQGjZy0BUnjNPkXOQGkTyj4jDxZ2z+z9Vy8BwfothdcYbZK
       <Reference URI="">
         <Transforms>
           <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+          <Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
         </Transforms>
         <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-        <DigestValue>iFBscXKSORnVsZx5iECt0AlYdIylNXMJpBW55jdJzn8=</DigestValue>
+        <DigestValue>rBEA3+2NQ2EWtg5LArTozJyMmCknzlY8J3pmGAPtmaE=</DigestValue>
       </Reference>
     </SignedInfo>
-    <SignatureValue>A9JPcbbet4JV2uGCZ6JRpYHcMXTGVm/b2nPNfWNHL5Yez+7NZFW9WnYCMmipleaCCx0lkDiRGDF7y9mYYO9ov3VhI0i6lTNxZjSjRlznElgaaaSCFi1f93cntLYzo8RqccK3hCm7sS7GMmBHfZIpq56Nk1uISq1yQ7GDYFF9+1k=</SignatureValue>
+    <SignatureValue>csNmQrzkNL2sAvnNtdML7vUGqNlRf+BtODCxv1a6K+9G2Y8cD8mXMnSt/cwu1nQq+7I5s14XgYfz9XNKx0HW7O1uRijagDmo6z9pH+dGHuNNB1q0ybK8eH71csgKz4bKEC6YtVffTgerL9lk/IMuxtpDDn5XGSqGZyMciMw01FY=</SignatureValue>
     <KeyInfo>
       <KeyName>a3078b5ec7adb9db58d62e4aeebc19751c5acbe1</KeyName>
     </KeyInfo>
@@ -768,12 +767,13 @@ ilZjTJIlLOkXk6uE8vQGjZy0BUnjNPkXOQGkTyj4jDxZ2z+z9Vy8BwfothdcYbZK
       <Reference URI="">
         <Transforms>
           <Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+          <Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
         </Transforms>
         <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-        <DigestValue>SJSUa/N2KsAz5T2+o3AkOFtmLAtNvdpVr+oHV0kHTco=</DigestValue>
+        <DigestValue>xsvcxzsN/3Mc4U4i7CvOAc8CHBFD+YVuxiwDb33w0Rw=</DigestValue>
       </Reference>
     </SignedInfo>
-    <SignatureValue>5LWTuoWvLdnchl/znjGagOWqYPUHXmOdYvcqxpB0POU/ZGaLftleNiKW/5Xmmw7ZUL9vTV27z8olJ9wi+Xw9/4aa9fEoNByn+66IQ+9lwSSzxHICKOtMAw8MmXX6Ryb/LOIqp+DzyHPCG+JMqpo+2jLY96VA9jYwPgVtdA6OWrY=</SignatureValue>
+    <SignatureValue>vKRA2LN9DfP7ZELWEltDLCDDjVs0XzJL/C61j1BBPBO62XB9EJjtQBxCCU4NDqzDrBMYwFnHlQbUjKC9pZrRDSP14qLR+sCYUXKkKs81mzpTVTIEOIsIWQv6xTImrzb1NzzBSFY5hM9YlGpYfP2B9598h6T6CfFMQppzrizJulI=</SignatureValue>
     <KeyInfo>
       <KeyName>a3078b5ec7adb9db58d62e4aeebc19751c5acbe1</KeyName>
     </KeyInfo>

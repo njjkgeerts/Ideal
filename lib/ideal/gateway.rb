@@ -3,15 +3,16 @@
 require 'openssl'
 require 'net/https'
 require 'base64'
+require 'xmldsig'
 
 module Ideal
   # === Response classes
-  # 
+  #
   # * Response
   # * TransactionResponse
   # * StatusResponse
   # * DirectoryResponse
-  # 
+  #
   # See the Response class for more information on errors.
   class Gateway
     LANGUAGE = 'nl'
@@ -249,11 +250,9 @@ module Ideal
     def enforce_maximum_length(key, string, max_length)
       raise ArgumentError, "The value for `#{key}' exceeds the limit of #{max_length} characters." if string.length > max_length
       raise ArgumentError, "The value for `#{key}' contains diacritical characters `#{string}'." if string =~ DIACRITICAL_CHARACTERS
-    end    
+    end
 
-    #signs the xml
     def add_signature(xml)
-      # digest_val = digest_value(xml.doc.children[0])
       xml.Signature(xmlns: 'http://www.w3.org/2000/09/xmldsig#') do |xml|
         xml.SignedInfo do |xml|
           xml.CanonicalizationMethod(Algorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#')
@@ -261,6 +260,7 @@ module Ideal
           xml.Reference(URI: '') do |xml|
             xml.Transforms do |xml|
               xml.Transform(Algorithm: 'http://www.w3.org/2000/09/xmldsig#enveloped-signature')
+              xml.Transform(Algorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#')
             end
             xml.DigestMethod(Algorithm: 'http://www.w3.org/2001/04/xmlenc#sha256')
             xml.DigestValue
@@ -272,9 +272,9 @@ module Ideal
         end
       end
     end
-    
+
     def sign!(xml)
-      SignedDocument.new(xml).sign Ideal::Gateway.private_key
+      Xmldsig::SignedDocument.new(xml).sign Ideal::Gateway.private_key
     end
 
     # Creates a +signatureValue+ from the xml+.
@@ -284,7 +284,7 @@ module Ideal
       signature = Ideal::Gateway.private_key.sign(OpenSSL::Digest::SHA256.new, canonical)
       Base64.encode64(signature)
     end
-    
+
     # Creates a +digestValue+ from the xml+.
     # TODO remove
     def digest_value(xml)
@@ -292,7 +292,7 @@ module Ideal
       digest = OpenSSL::Digest::SHA256.new.digest canonical
       Base64.encode64(digest)
     end
-    
+
     # Creates a keyName value for the XML signature
     def fingerprint
       Digest::SHA1.hexdigest(Ideal::Gateway.private_certificate.to_der)
@@ -378,7 +378,7 @@ module Ideal
         end
       end.to_xml(:save_with => Nokogiri::XML::Node::SaveOptions::AS_XML)
     end
-    
+
     def log(thing, contents)
       $stderr.write("\n#{thing}:\n\n#{contents}\n") if $DEBUG
     end
