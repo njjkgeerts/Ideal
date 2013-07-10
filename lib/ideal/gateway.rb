@@ -277,22 +277,6 @@ module Ideal
       Xmldsig::SignedDocument.new(xml).sign Ideal::Gateway.private_key
     end
 
-    # Creates a +signatureValue+ from the xml+.
-    # TODO remove
-    def signature_value(sig_val)
-      canonical = sig_val.canonicalize(Nokogiri::XML::XML_C14N_EXCLUSIVE_1_0)
-      signature = Ideal::Gateway.private_key.sign(OpenSSL::Digest::SHA256.new, canonical)
-      Base64.encode64(signature)
-    end
-
-    # Creates a +digestValue+ from the xml+.
-    # TODO remove
-    def digest_value(xml)
-      canonical = xml.canonicalize(Nokogiri::XML::XML_C14N_EXCLUSIVE_1_0)
-      digest = OpenSSL::Digest::SHA256.new.digest canonical
-      Base64.encode64(digest)
-    end
-
     # Creates a keyName value for the XML signature
     def fingerprint
       Digest::SHA1.hexdigest(Ideal::Gateway.private_certificate.to_der)
