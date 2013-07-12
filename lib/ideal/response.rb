@@ -158,7 +158,7 @@ module Ideal
     # Returns the URL to the issuer’s page where the consumer should be
     # redirected to in order to perform the payment.
     def service_url
-      CGI::unescapeHTML(text('//issuerAuthenticationURL'))
+      CGI::unescapeHTML(text('//issuerAuthenticationURL').to_s)
     end
 
     def verified?

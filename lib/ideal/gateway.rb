@@ -338,7 +338,7 @@ module Ideal
 
       timestamp = created_at_timestamp
 
-      Nokogiri::XML::Builder.new(encoding: 'UTF-8') do |xml|
+      xml = Nokogiri::XML::Builder.new(encoding: 'UTF-8') do |xml|
         xml.AcquirerTrxReq(xmlns: XML_NAMESPACE, version: API_VERSION) do |xml|
           xml.createDateTimestamp created_at_timestamp
           xml.Issuer do |xml|
@@ -361,6 +361,9 @@ module Ideal
           add_signature(xml)
         end
       end.to_xml(:save_with => Nokogiri::XML::Node::SaveOptions::AS_XML)
+      signed_xml = sign! xml
+      # debugger
+      signed_xml.to_s
     end
 
     def log(thing, contents)
