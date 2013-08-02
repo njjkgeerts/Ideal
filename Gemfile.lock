@@ -22,8 +22,6 @@ GEM
     nap (0.5.1)
     nokogiri (1.5.5)
     rake (0.9.2.2)
-    xmldsig (0.2.1)
-      nokogiri
 
 PLATFORMS
   ruby
@@ -34,4 +32,3 @@ DEPENDENCIES
   ideal!
   mocha
   rake
-  xmldsig
