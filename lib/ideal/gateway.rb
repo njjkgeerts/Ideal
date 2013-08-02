@@ -35,10 +35,16 @@ module Ideal
       attr_accessor :live_url, :test_url
 
       attr_accessor :private_key_file_path, :ideal_certificate_file_path
+
+      # Path to xmlsec1 executable
+      attr_accessor :xmlsec1_path
     end
 
     # Environment defaults to test
     self.environment = :test
+    
+    # Xmlsec1 path defaults to global path
+    self.xmlsec1_path = 'xmlsec1'
 
     # Loads the global merchant private_key from disk.
     def self.private_key_file=(pkey_file)
@@ -292,7 +298,7 @@ module Ideal
         file.write(xml)
         file.rewind
 
-        output = %x[xmlsec1 --sign --privkey-pem #{Ideal::Gateway.private_key_file_path} --pwd #{Ideal::Gateway.passphrase} #{file.path}]
+        output = %x[#{Ideal::Gateway.xmlsec1_path} --sign --privkey-pem #{Ideal::Gateway.private_key_file_path} --pwd #{Ideal::Gateway.passphrase} #{file.path}]
       ensure
          file.close
          file.unlink
