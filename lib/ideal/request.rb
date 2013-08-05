@@ -10,7 +10,8 @@ module Ideal
     end
 
     def to_xml
-      build_xml.to_xml(:save_with => Nokogiri::XML::Node::SaveOptions::AS_XML)
+      #build_xml.to_xml(:save_with => Nokogiri::XML::Node::SaveOptions::AS_XML)
+      build_xml.to_xml
     end
 
     private
@@ -46,9 +47,9 @@ module Ideal
           xml.Reference(:URI => '') {
             xml.Transforms {
               xml.Transform(:Algorithm => 'http://www.w3.org/2000/09/xmldsig#enveloped-signature')
-              # xml.Transform(:Algorithm => 'http://www.w3.org/2001/10/xml-exc-c14n#') {
-              #   xml.InclusiveNamespaces(:PrefixList => "")
-              # }
+              xml.Transform(:Algorithm => 'http://www.w3.org/2001/10/xml-exc-c14n#') {
+                xml.InclusiveNamespaces(:PrefixList => "")
+              }
             }
             xml.DigestMethod(:Algorithm => 'http://www.w3.org/2001/04/xmlenc#sha256')
             xml.DigestValue
