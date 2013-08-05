@@ -152,7 +152,7 @@ module Ideal
         file.write(xml)
         file.rewind
 
-        @verified ||= %x[#{Ideal::Gateway.xmlsec1_path} --verify --pubkey-cert-pem #{Ideal::Gateway.ideal_certificate_file_path} #{file.path}] ; result=$?.success?
+        @verified ||= %x[xmlsec1 --verify --pubkey-cert-pem #{Ideal::Gateway.ideal_certificate_file_path} #{file.path}] ; result=$?.success?
       ensure
          file.close
          file.unlink
